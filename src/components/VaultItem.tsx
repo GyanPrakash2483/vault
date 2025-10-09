@@ -36,7 +36,8 @@ export default function VaultItem({ item, onEdit, onDelete }: VaultItemProps) {
     }
   };
 
-  const decryptedPassword = decryptText(item.password);
+  // `item.password` is expected to be decrypted by the parent component
+  const decryptedPassword = item.password || '';
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md dark:hover:shadow-lg transition-shadow">

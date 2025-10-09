@@ -22,14 +22,27 @@ export default function VaultInterface() {
 
   // Initialize encryption key (in production, this should be derived from user's master password)
   useEffect(() => {
-    const key = generateEncryptionKey();
-    setEncryptionKey(key);
+    try {
+      const stored = localStorage.getItem('encryptionKey');
+      if (stored) {
+        setEncryptionKey(stored);
+      } else {
+        const key = generateEncryptionKey();
+        localStorage.setItem('encryptionKey', key);
+        setEncryptionKey(key);
+      }
+    } catch (err) {
+      // localStorage may be unavailable in some environments; fall back to generated key
+      const key = generateEncryptionKey();
+      setEncryptionKey(key);
+    }
   }, []);
 
-  // Fetch vault items
+  // Fetch vault items after encryption key is available so we can decrypt them client-side
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (encryptionKey) fetchItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encryptionKey]);
 
   // Filter items based on search term
   useEffect(() => {
@@ -54,7 +67,25 @@ export default function VaultInterface() {
       
       if (response.ok) {
         const data = await response.json();
-        setItems(data.items || []);
+        const rawItems: VaultItem[] = data.items || [];
+
+        // Decrypt fields on the client side using the persistent encryption key.
+        const decryptedItems = rawItems.map((it) => {
+          try {
+            return {
+              ...it,
+              password: it.password ? decrypt(it.password, encryptionKey) : '',
+              username: it.username ? decrypt(it.username, encryptionKey) : '',
+              notes: it.notes ? decrypt(it.notes, encryptionKey) : '',
+            } as VaultItem;
+          } catch (err) {
+            // if decryption fails, fall back to raw values so the app doesn't crash
+            console.warn('Failed to decrypt item', it._id, err);
+            return it;
+          }
+        });
+
+        setItems(decryptedItems);
       } else if (response.status === 401) {
         // User not authenticated, show error
         setError('Please log in to access your vault');
